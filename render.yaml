@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: pc-quote-live-api
+    runtime: python
+    plan: starter
+    buildCommand: "python --version"
+    startCommand: "python pc_catalog_server.py --db /var/data/pc_catalog.sqlite3 --host 0.0.0.0 --port $PORT"
+    healthCheckPath: /health
+    disk:
+      name: pc-catalog-data
+      mountPath: /var/data
+      sizeGB: 10
+    envVars:
+      - key: REEF_API_KEY
+        sync: false
+      - key: PRICE_CACHE_SECONDS
+        value: "300"
