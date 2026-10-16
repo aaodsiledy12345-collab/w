@@ -150,7 +150,7 @@ class Handler(BaseHTTPRequestHandler):
       except Exception as e: errors.append({'id':pid,'error':str(e)})
      self.send_json(200,{'items':items,'updatedAt':now_iso(),'live':True,'errors':errors,'message':'공급사 API 응답에 가격이 있을 때만 가격을 표시합니다.'}); return
     self.send_json(503 if not REEF_API_KEY else 200,{'items':[{'id':'__connection_test__','priceKrw':None,'currency':'KRW'}] if REEF_API_KEY and not ids else [],'updatedAt':now_iso(),'live':False,'priceFeedConfigured':bool(REEF_API_KEY),'message':'실제 가격을 가져올 상품 ID 또는 공급사 API 키가 없습니다. 가격을 임의 생성하지 않았습니다.'}); return
-           if u.path in ('/', '/pc_quote_app.html'):
+        if u.path in ('/', '/pc_quote_app.html'):
             html_path = BASE / 'pc_quote_app.html'
             if html_path.exists():
                 body = html_path.read_bytes()
