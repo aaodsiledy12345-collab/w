@@ -150,16 +150,16 @@ class Handler(BaseHTTPRequestHandler):
       except Exception as e: errors.append({'id':pid,'error':str(e)})
      self.send_json(200,{'items':items,'updatedAt':now_iso(),'live':True,'errors':errors,'message':'공급사 API 응답에 가격이 있을 때만 가격을 표시합니다.'}); return
     self.send_json(503 if not REEF_API_KEY else 200,{'items':[{'id':'__connection_test__','priceKrw':None,'currency':'KRW'}] if REEF_API_KEY and not ids else [],'updatedAt':now_iso(),'live':False,'priceFeedConfigured':bool(REEF_API_KEY),'message':'실제 가격을 가져올 상품 ID 또는 공급사 API 키가 없습니다. 가격을 임의 생성하지 않았습니다.'}); return
-if u.path in ('/', '/pc_quote_app.html'):
-    html_path = BASE / 'pc_quote_app.html'
-    if html_path.exists():
-        body = html_path.read_bytes()
-        self.send_response(200)
-        self.send_header('Content-Type', 'text/html; charset=utf-8')
-        self.send_header('Content-Length', str(len(body)))
-        self.end_headers()
-        self.wfile.write(body)
-        return
+    if u.path in ('/', '/pc_quote_app.html'):
+        html_path = BASE / 'pc_quote_app.html'
+        if html_path.exists():
+            body = html_path.read_bytes()
+            self.send_response(200)
+            self.send_header('Content-Type', 'text/html; charset=utf-8')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
    self.send_json(404,{'error':'not_found','message':'지원하지 않는 경로입니다.'})
   except Exception as e:
    self.send_json(502,{'error':'provider_error','message':str(e),'items':[],'live':False})
