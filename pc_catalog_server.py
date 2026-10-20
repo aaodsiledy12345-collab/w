@@ -103,15 +103,40 @@ def extract_products(data):
  for x in candidates:
   if x['id'] not in seen: seen.add(x['id']); out.append(x)
  return out
-
 def live_search(q, category, page, page_size):
- # Provider API currently documents 40 rows/page and up to 50 pages; we expose requested page sizes to the app.
- data=reef_post('/danawa/v1/search',{'query':q or category or 'PC 부품','scope':'catalog','page':page})
- items=extract_products(data)
- if category: items=[x for x in items if x['category']==category or x['category']=='other']
- start=(page-1)*page_size; selected=items[start:start+page_size] if page_size<40 else items[:page_size]
- total=len(items)
- return {'items':selected,'total':total,'page':page,'pageSize':page_size,'currency':'KRW','updatedAt':now_iso(),'source':'Danawa via ReefAPI','live':True,'note':'가격은 공급사 응답 기준입니다. 이미지 URL가 제공된 상품만 표시합니다.'}
+    data = reef_post(
+        '/danawa/v1/search',
+        {
+            'query': q or category or 'PC 부품',
+            'scope': 'catalog',
+            'page': page
+        }
+    )
+
+    items = extract_products(data)
+
+    if category:
+        items = [
+            x for x in items
+            if x['category'] == category or x['category'] == 'other'
+        ]
+
+    # 공급사에서 이미 요청한 페이지를 반환하므로
+    # 페이지 번호에 따른 오프셋을 다시 적용하지 않는다.
+    selected = items[:page_size]
+
+    return {
+        'items': selected,
+        'total': len(items),
+        'page': page,
+        'pageSize': page_size,
+        'currency': 'KRW',
+        'updatedAt': now_iso(),
+        'source': 'Danawa via ReefAPI',
+        'live': True,
+        'hasMore': len(items) >= page_size,
+        'note': '현재 검색 페이지의 결과입니다. 전체 상품 수와는 다릅니다.'
+         }
 
 def live_product_price(pid):
  # Only Danawa IDs are resolved through the live product endpoint. Cache avoids repeated paid calls during rapid refreshes.
