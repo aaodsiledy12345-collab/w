@@ -103,40 +103,41 @@ def extract_products(data):
  for x in candidates:
   if x['id'] not in seen: seen.add(x['id']); out.append(x)
  return out
+
+def extract_total(data, fallback):
+ # Preserve the provider's catalogue-wide count when it supplies one.
+ keys=('total','total_count','totalCount','totalResults','total_results','totalProducts','total_products','count')
+ for obj in recursive_dicts(data):
+  for key in keys:
+   value=obj.get(key)
+   if isinstance(value, (int,float)) and value >= 0: return int(value)
+   if isinstance(value,str) and value.strip().isdigit(): return int(value.strip())
+ return int(fallback)
+
+def cache_products(items):
+ # Persist only real supplier records in SQLite; never fabricate product data.
+ if not items: return
+ with DB_LOCK, connect() as db:
+  for x in items:
+   pid=str(x.get('id') or '').strip(); name=str(x.get('name') or '').strip(); cat=CATEGORY_MAP.get(str(x.get('category') or '').lower(),'')
+   if not pid or not name or not cat: continue
+   db.execute("""INSERT INTO products(id,category,brand,name,price_krw,image_url,product_url,description,updated_at)
+    VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET category=excluded.category,brand=excluded.brand,name=excluded.name,
+    price_krw=CASE WHEN excluded.price_krw>0 THEN excluded.price_krw ELSE products.price_krw END,
+    image_url=excluded.image_url,product_url=excluded.product_url,description=excluded.description,updated_at=excluded.updated_at""",
+    (pid,cat,str(x.get('brand') or ''),name,price_num(x.get('priceKrw')),valid_url(x.get('imageUrl')),valid_url(x.get('url')),str(x.get('source') or 'Danawa live catalogue'),now_iso()))
+  db.commit()
+
 def live_search(q, category, page, page_size):
-    data = reef_post(
-        '/danawa/v1/search',
-        {
-            'query': q or category or 'PC 부품',
-            'scope': 'catalog',
-            'page': page
-        }
-    )
-
-    items = extract_products(data)
-
-    if category:
-        items = [
-            x for x in items
-            if x['category'] == category or x['category'] == 'other'
-        ]
-
-    # 공급사에서 이미 요청한 페이지를 반환하므로
-    # 페이지 번호에 따른 오프셋을 다시 적용하지 않는다.
-    selected = items[:page_size]
-
-    return {
-        'items': selected,
-        'total': len(items),
-        'page': page,
-        'pageSize': page_size,
-        'currency': 'KRW',
-        'updatedAt': now_iso(),
-        'source': 'Danawa via ReefAPI',
-        'live': True,
-        'hasMore': len(items) >= page_size,
-        'note': '현재 검색 페이지의 결과입니다. 전체 상품 수와는 다릅니다.'
-         }
+ # Upstream API owns pagination; do not slice a second time, which drops later-page products.
+ data=reef_post('/danawa/v1/search',{'query':q or category or 'PC 부품','scope':'catalog','page':page})
+ items=extract_products(data)
+ if category: items=[x for x in items if x['category']==category or x['category']=='other']
+ total=extract_total(data, len(items))
+ selected=items[:page_size]
+ cache_products(selected)
+ return {'items':selected,'total':total,'page':page,'pageSize':page_size,'currency':'KRW','updatedAt':now_iso(),'source':'Danawa via ReefAPI','live':True,
+ 'note':'현재 페이지의 상품만 표시합니다. 전체 상품 수와 페이지 범위는 공급사 API가 제공하는 검색/페이지네이션에 따릅니다. 실제 이미지 URL가 있는 상품만 표시합니다.'}
 
 def live_product_price(pid):
  # Only Danawa IDs are resolved through the live product endpoint. Cache avoids repeated paid calls during rapid refreshes.
@@ -175,18 +176,6 @@ class Handler(BaseHTTPRequestHandler):
       except Exception as e: errors.append({'id':pid,'error':str(e)})
      self.send_json(200,{'items':items,'updatedAt':now_iso(),'live':True,'errors':errors,'message':'공급사 API 응답에 가격이 있을 때만 가격을 표시합니다.'}); return
     self.send_json(503 if not REEF_API_KEY else 200,{'items':[{'id':'__connection_test__','priceKrw':None,'currency':'KRW'}] if REEF_API_KEY and not ids else [],'updatedAt':now_iso(),'live':False,'priceFeedConfigured':bool(REEF_API_KEY),'message':'실제 가격을 가져올 상품 ID 또는 공급사 API 키가 없습니다. 가격을 임의 생성하지 않았습니다.'}); return
-
-   if u.path in ('/', '/pc_quote_app.html'):
-    html_path = BASE / 'pc_quote_app.html'
-    if html_path.exists():
-     body = html_path.read_bytes()
-     self.send_response(200)
-     self.send_header('Content-Type', 'text/html; charset=utf-8')
-     self.send_header('Content-Length', str(len(body)))
-     self.end_headers()
-     self.wfile.write(body)
-     return
-
    self.send_json(404,{'error':'not_found','message':'지원하지 않는 경로입니다.'})
   except Exception as e:
    self.send_json(502,{'error':'provider_error','message':str(e),'items':[],'live':False})
